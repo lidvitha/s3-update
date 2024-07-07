@@ -59,8 +59,7 @@ public class S3SinkTask extends SinkTask {
         if (!recordsBuffer.isEmpty()) {
             try {
                 StringBuilder fileContent = new StringBuilder();
-
-                // Check if the file already exists in the S3 bucket
+                //File existing
                 if (s3Client.doesObjectExist(bucketName, currentFileKey)) {
                     S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketName, currentFileKey));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(s3Object.getObjectContent()));
@@ -70,7 +69,7 @@ public class S3SinkTask extends SinkTask {
                     }
                 }
 
-                // Append new records to the file content
+                // Appending content
                 for (String record : recordsBuffer) {
                     fileContent.append(record).append("\n");
                 }
