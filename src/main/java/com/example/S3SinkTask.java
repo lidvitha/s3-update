@@ -1,6 +1,5 @@
 package com.example;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
@@ -32,7 +31,7 @@ public class S3SinkTask extends SinkTask {
 
         s3Client = AmazonS3ClientBuilder.standard()
                 .withRegion(Regions.fromName(props.get(S3SinkConfig.S3_REGION)))
-                .withCredentials(new AWSStaticCredentialsProvider(new DefaultAWSCredentialsProviderChain()))
+                .withCredentials(DefaultAWSCredentialsProviderChain.getInstance())
                 .build();
 
         recordsBuffer = new ArrayList<>();
@@ -56,7 +55,8 @@ public class S3SinkTask extends SinkTask {
         if (!recordsBuffer.isEmpty()) {
             try {
                 StringBuilder fileContent = new StringBuilder();
-                //File existing
+
+                // Check if the file already exists in the S3 bucket
                 if (s3Client.doesObjectExist(bucketName, currentFileKey)) {
                     S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketName, currentFileKey));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(s3Object.getObjectContent()));
@@ -66,7 +66,7 @@ public class S3SinkTask extends SinkTask {
                     }
                 }
 
-                // Appending content
+                // Append new records to the file content
                 for (String record : recordsBuffer) {
                     fileContent.append(record).append("\n");
                 }
