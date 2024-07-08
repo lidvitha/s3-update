@@ -27,12 +27,15 @@ public class S3SinkTask extends SinkTask {
     private int batchSize;
     private long batchTimeMs;
     private String currentFileKey;
+    private String topicName;
+    private int eventCounter = 0;
 
     @Override
     public void start(Map<String, String> props) {
         String accessKeyId = props.get(S3SinkConfig.AWS_ACCESS_KEY_ID);
         String secretAccessKey = props.get(S3SinkConfig.AWS_SECRET_ACCESS_KEY);
         bucketName = props.get(S3SinkConfig.S3_BUCKET_NAME);
+        topicName = props.get(S3SinkConfig.S3_TOPIC_NAME);
 
         BasicAWSCredentials awsCreds = new BasicAWSCredentials(accessKeyId, secretAccessKey);
         s3Client = AmazonS3ClientBuilder.standard()
@@ -44,7 +47,7 @@ public class S3SinkTask extends SinkTask {
         lastFlushTime = System.currentTimeMillis();
         batchSize = Integer.parseInt(props.get(S3SinkConfig.S3_BATCH_SIZE));
         batchTimeMs = Long.parseLong(props.get(S3SinkConfig.S3_BATCH_TIME_MS));
-        currentFileKey = generateFileKey("default-topic");
+        currentFileKey = generateFileKey();
     }
 
     @Override
@@ -54,7 +57,7 @@ public class S3SinkTask extends SinkTask {
             if (recordsBuffer.size() >= batchSize || (System.currentTimeMillis() - lastFlushTime) >= batchTimeMs) {
                 flushRecords(record.topic());
                 // Generate a new file key for the next batch after flushing
-                currentFileKey = generateFileKey(record.topic());
+                currentFileKey = generateFileKey();
             }
         }
     }
@@ -62,7 +65,7 @@ public class S3SinkTask extends SinkTask {
     private void flushRecords(String topic) {
         if (!recordsBuffer.isEmpty()) {
             try {
-                String key = String.format("%s/event/%s", topic, currentFileKey);
+                String key = String.format("%s/%s", topic, currentFileKey);
 
                 StringBuilder fileContent = new StringBuilder();
 
@@ -90,16 +93,17 @@ public class S3SinkTask extends SinkTask {
         }
     }
 
-    private String generateFileKey(String topic) {
+    private String generateFileKey() {
+        eventCounter++;
         String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
-        return String.format("%s-%s-events-%s.txt", bucketName, topic, timestamp);
+        return String.format("event%d-%s.txt", eventCounter, timestamp);
     }
 
     @Override
     public void stop() {
         // Ensure any remaining records are flushed before stopping
         if (!recordsBuffer.isEmpty()) {
-            flushRecords("default-topic");
+            flushRecords(topicName);
         }
     }
 
