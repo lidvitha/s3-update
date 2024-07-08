@@ -1,7 +1,7 @@
 package com.example;
 
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -28,20 +28,17 @@ public class S3SinkTask extends SinkTask {
 
     @Override
     public void start(Map<String, String> props) {
-        String accessKeyId = props.get(S3SinkConfig.AWS_ACCESS_KEY_ID);
-        String secretAccessKey = props.get(S3SinkConfig.AWS_SECRET_ACCESS_KEY);
         bucketName = props.get(S3SinkConfig.S3_BUCKET_NAME);
 
-        BasicAWSCredentials awsCreds = new BasicAWSCredentials(accessKeyId, secretAccessKey);
         s3Client = AmazonS3ClientBuilder.standard()
-                .withRegion(Regions.US_EAST_1)
-                .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+                .withRegion(Regions.fromName(props.get(S3SinkConfig.S3_REGION)))
+                .withCredentials(new AWSStaticCredentialsProvider(new DefaultAWSCredentialsProviderChain()))
                 .build();
 
         recordsBuffer = new ArrayList<>();
         lastFlushTime = System.currentTimeMillis();
-        batchSize = Integer.parseInt(props.get("s3.batch.size"));
-        batchTimeMs = Long.parseLong(props.get("s3.batch.time.ms"));
+        batchSize = Integer.parseInt(props.get(S3SinkConfig.S3_BATCH_SIZE));
+        batchTimeMs = Long.parseLong(props.get(S3SinkConfig.S3_BATCH_TIME_MS));
         currentFileKey = "new-test-topic/current_file.txt";  // Fixed file name for appending text
     }
 
