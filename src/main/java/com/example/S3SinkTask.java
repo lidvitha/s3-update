@@ -13,21 +13,16 @@ import org.apache.kafka.connect.sink.SinkTask;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
-import java.util.Collection;
-import java.util.Date;
-import java.util.Map;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class S3SinkTask extends SinkTask {
     private AmazonS3 s3Client;
     private String bucketName;
-    private List<String> recordsBuffer;
-    private long lastFlushTime;
+    private Map<String, List<String>> topicBuffers;
+    private Map<String, Long> topicLastFlushTimes;
+    private Map<String, String> topicFileKeys;
     private int batchSize;
     private long batchTimeMs;
-    private String currentFileKey;
-    private String topicName;
     private int eventCounter = 0;
 
     @Override
@@ -35,7 +30,6 @@ public class S3SinkTask extends SinkTask {
         String accessKeyId = props.get(S3SinkConfig.AWS_ACCESS_KEY_ID);
         String secretAccessKey = props.get(S3SinkConfig.AWS_SECRET_ACCESS_KEY);
         bucketName = props.get(S3SinkConfig.S3_BUCKET_NAME);
-        topicName = props.get(S3SinkConfig.S3_TOPIC_NAME);
 
         BasicAWSCredentials awsCreds = new BasicAWSCredentials(accessKeyId, secretAccessKey);
         s3Client = AmazonS3ClientBuilder.standard()
@@ -43,29 +37,32 @@ public class S3SinkTask extends SinkTask {
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
                 .build();
 
-        recordsBuffer = new ArrayList<>();
-        lastFlushTime = System.currentTimeMillis();
+        topicBuffers = new HashMap<>();
+        topicLastFlushTimes = new HashMap<>();
+        topicFileKeys = new HashMap<>();
+
         batchSize = Integer.parseInt(props.get(S3SinkConfig.S3_BATCH_SIZE));
         batchTimeMs = Long.parseLong(props.get(S3SinkConfig.S3_BATCH_TIME_MS));
-        currentFileKey = generateFileKey();
     }
 
     @Override
     public void put(Collection<SinkRecord> records) {
         for (SinkRecord record : records) {
-            recordsBuffer.add(record.value().toString());
-            if (recordsBuffer.size() >= batchSize || (System.currentTimeMillis() - lastFlushTime) >= batchTimeMs) {
-                flushRecords(record.topic());
+            String topic = record.topic();
+            topicBuffers.computeIfAbsent(topic, k -> new ArrayList<>()).add(record.value().toString());
+
+            if (topicBuffers.get(topic).size() >= batchSize || (System.currentTimeMillis() - topicLastFlushTimes.getOrDefault(topic, 0L)) >= batchTimeMs) {
+                flushRecords(topic);
                 // Generate a new file key for the next batch after flushing
-                currentFileKey = generateFileKey();
+                topicFileKeys.put(topic, generateFileKey());
             }
         }
     }
 
     private void flushRecords(String topic) {
-        if (!recordsBuffer.isEmpty()) {
+        if (!topicBuffers.get(topic).isEmpty()) {
             try {
-                String key = String.format("%s/%s", topic, currentFileKey);
+                String key = String.format("%s/%s", topic, topicFileKeys.getOrDefault(topic, generateFileKey()));
 
                 StringBuilder fileContent = new StringBuilder();
 
@@ -80,13 +77,13 @@ public class S3SinkTask extends SinkTask {
                 }
 
                 // Append new records to the file content
-                for (String record : recordsBuffer) {
+                for (String record : topicBuffers.get(topic)) {
                     fileContent.append(record).append("\n");
                 }
 
                 s3Client.putObject(bucketName, key, fileContent.toString());
-                recordsBuffer.clear();
-                lastFlushTime = System.currentTimeMillis();
+                topicBuffers.get(topic).clear();
+                topicLastFlushTimes.put(topic, System.currentTimeMillis());
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -102,8 +99,10 @@ public class S3SinkTask extends SinkTask {
     @Override
     public void stop() {
         // Ensure any remaining records are flushed before stopping
-        if (!recordsBuffer.isEmpty()) {
-            flushRecords(topicName);
+        for (String topic : topicBuffers.keySet()) {
+            if (!topicBuffers.get(topic).isEmpty()) {
+                flushRecords(topic);
+            }
         }
     }
 
