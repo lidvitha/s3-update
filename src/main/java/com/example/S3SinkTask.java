@@ -7,6 +7,14 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.rest.entities.SchemaString;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 
@@ -24,6 +32,8 @@ public class S3SinkTask extends SinkTask {
     private int batchSize;
     private long batchTimeMs;
     private int eventCounter = 0;
+    private SchemaRegistryClient schemaRegistryClient;
+    private Map<String, Schema> schemas = new HashMap<>();
 
     @Override
     public void start(Map<String, String> props) {
@@ -43,20 +53,48 @@ public class S3SinkTask extends SinkTask {
 
         batchSize = Integer.parseInt(props.get(S3SinkConfig.S3_BATCH_SIZE));
         batchTimeMs = Long.parseLong(props.get(S3SinkConfig.S3_BATCH_TIME_MS));
+
+        String schemaRegistryUrl = props.get(S3SinkConfig.SCHEMA_REGISTRY_URL);
+        schemaRegistryClient = new CachedSchemaRegistryClient(schemaRegistryUrl, 100);
     }
 
     @Override
     public void put(Collection<SinkRecord> records) {
         for (SinkRecord record : records) {
             String topic = record.topic();
-            topicBuffers.computeIfAbsent(topic, k -> new ArrayList<>()).add(record.value().toString());
+            try {
+                Schema schema = getSchemaForTopic(topic);
+                if (schema != null) {
+                    validateAvroPayload(record.value(), schema);
+                    topicBuffers.computeIfAbsent(topic, k -> new ArrayList<>()).add(record.value().toString());
 
-            if (topicBuffers.get(topic).size() >= batchSize || (System.currentTimeMillis() - topicLastFlushTimes.getOrDefault(topic, 0L)) >= batchTimeMs) {
-                flushRecords(topic);
-                // Generate a new file key for the next batch after flushing
-                topicFileKeys.put(topic, generateFileKey());
+                    if (topicBuffers.get(topic).size() >= batchSize || (System.currentTimeMillis() - topicLastFlushTimes.getOrDefault(topic, 0L)) >= batchTimeMs) {
+                        flushRecords(topic);
+                        // Generate a new file key for the next batch after flushing
+                        topicFileKeys.put(topic, generateFileKey());
+                    }
+                } else {
+                    // Handle invalid schema
+                    throw new RuntimeException("Schema not found for topic: " + topic);
+                }
+            } catch (Exception e) {
+                // Handle exceptions
+                throw new RuntimeException("Error processing record", e);
             }
         }
+    }
+
+    private Schema getSchemaForTopic(String topic) throws Exception {
+        String subject = topic + "-value";
+        SchemaString schemaString = schemaRegistryClient.getLatestSchemaMetadata(subject).getSchema();
+        return new Schema.Parser().parse(schemaString.getSchemaString());
+    }
+
+    private void validateAvroPayload(Object value, Schema schema) throws Exception {
+        byte[] payload = (byte[]) value;
+        DatumReader<GenericRecord> reader = new SpecificDatumReader<>(schema);
+        DecoderFactory.get().binaryDecoder(payload, null);
+        reader.read(null, DecoderFactory.get().binaryDecoder(payload, null));
     }
 
     private void flushRecords(String topic) {
