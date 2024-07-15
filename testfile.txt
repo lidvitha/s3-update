@@ -1,3 +1,66 @@
+C:\Users\ADMIN\Downloads\Projects\custom-s3-sink-connector>curl -X GET http://localhost:8083/connectors/s3-sink-connector/status
+{"name":"s3-sink-connector","connector":{"state":"RUNNING","worker_id":"connect:8083"},"tasks":[{"id":0,"state":"FAILED","worker_id":"connect:8083","trace":"org.apache.kafka.connect.errors.ConnectException: Exiting WorkerSinkTask due to unrecoverable exception.\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:632)\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.poll(WorkerSinkTask.java:350)\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.iteration(WorkerSinkTask.java:250)\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.execute(WorkerSinkTask.java:219)\n\tat org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:204)\n\tat org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:259)\n\tat org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:236)\n\tat java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)\n\tat java.base/java.lang.Thread.run(Thread.java:829)\nCaused by: java.lang.ClassCastException: class org.apache.kafka.connect.data.Struct cannot be cast to class org.apache.avro.generic.GenericRecord (org.apache.kafka.connect.data.Struct is in unnamed module of loader 'app'; org.apache.avro.generic.GenericRecord is in unnamed module of loader org.apache.kafka.connect.runtime.isolation.PluginClassLoader @6574a52c)\n\tat com.example.S3SinkTask.flushRecords(S3SinkTask.java:90)\n\tat com.example.S3SinkTask.put(S3SinkTask.java:67)\n\tat org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:601)\n\t... 11 more\n"}],"type":"sink"}
+
+
+
+[2024-07-14 19:30:17,003] ERROR WorkerSinkTask{id=s3-sink-connector-0} Task threw an uncaught and unrecoverable exception. Task is being killed and will not recover until manually restarted. Error: class org.apache.kafka.connect.data.Struct cannot be cast to class org.apache.avro.generic.GenericRecord (org.apache.kafka.connect.data.Struct is in unnamed module of loader 'app'; org.apache.avro.generic.GenericRecord is in unnamed module of loader org.apache.kafka.connect.runtime.isolation.PluginClassLoader @6574a52c) (org.apache.kafka.connect.runtime.WorkerSinkTask)
+java.lang.ClassCastException: class org.apache.kafka.connect.data.Struct cannot be cast to class org.apache.avro.generic.GenericRecord (org.apache.kafka.connect.data.Struct is in unnamed module of loader 'app'; org.apache.avro.generic.GenericRecord is in unnamed module of loader org.apache.kafka.connect.runtime.isolation.PluginClassLoader @6574a52c)
+        at com.example.S3SinkTask.flushRecords(S3SinkTask.java:90)
+        at com.example.S3SinkTask.put(S3SinkTask.java:67)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:601)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.poll(WorkerSinkTask.java:350)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.iteration(WorkerSinkTask.java:250)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.execute(WorkerSinkTask.java:219)
+        at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:204)
+        at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:259)
+        at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:236)
+        at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+        at java.base/java.lang.Thread.run(Thread.java:829)
+[2024-07-14 19:30:17,007] ERROR WorkerSinkTask{id=s3-sink-connector-0} Task threw an uncaught and unrecoverable exception. Task is being killed and will not recover until manually restarted (org.apache.kafka.connect.runtime.WorkerTask)
+org.apache.kafka.connect.errors.ConnectException: Exiting WorkerSinkTask due to unrecoverable exception.
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:632)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.poll(WorkerSinkTask.java:350)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.iteration(WorkerSinkTask.java:250)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.execute(WorkerSinkTask.java:219)
+        at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:204)
+        at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:259)
+        at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:236)
+        at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+        at java.base/java.lang.Thread.run(Thread.java:829)
+Caused by: java.lang.ClassCastException: class org.apache.kafka.connect.data.Struct cannot be cast to class org.apache.avro.generic.GenericRecord (org.apache.kafka.connect.data.Struct is in unnamed module of loader 'app'; org.apache.avro.generic.GenericRecord is in unnamed module of loader org.apache.kafka.connect.runtime.isolation.PluginClassLoader @6574a52c)
+        at com.example.S3SinkTask.flushRecords(S3SinkTask.java:90)
+        at com.example.S3SinkTask.put(S3SinkTask.java:67)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.deliverMessages(WorkerSinkTask.java:601)
+        ... 11 more
+[2024-07-14 19:30:17,008] WARN Could not stop task (org.apache.kafka.connect.runtime.WorkerSinkTask)
+java.lang.ClassCastException: class org.apache.kafka.connect.data.Struct cannot be cast to class org.apache.avro.generic.GenericRecord (org.apache.kafka.connect.data.Struct is in unnamed module of loader 'app'; org.apache.avro.generic.GenericRecord is in unnamed module of loader org.apache.kafka.connect.runtime.isolation.PluginClassLoader @6574a52c)
+        at com.example.S3SinkTask.flushRecords(S3SinkTask.java:90)
+        at com.example.S3SinkTask.stop(S3SinkTask.java:142)
+        at org.apache.kafka.connect.runtime.WorkerSinkTask.close(WorkerSinkTask.java:178)
+        at org.apache.kafka.connect.runtime.WorkerTask.doClose(WorkerTask.java:183)
+        at org.apache.kafka.connect.runtime.WorkerTask.doRun(WorkerTask.java:216)
+        at org.apache.kafka.connect.runtime.WorkerTask.run(WorkerTask.java:259)
+        at org.apache.kafka.connect.runtime.isolation.Plugins.lambda$withClassLoader$1(Plugins.java:236)
+        at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+        at java.base/java.lang.Thread.run(Thread.java:829)
+
+
+
+
+
+
+
+
+
 
 "Test content" 
 copy custom-s3-sink-connector-0.0.1-SNAPSHOT.jar C:\kafka-connect-config\plugins
