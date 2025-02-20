@@ -1,4 +1,152 @@
 
+
+
+
+import React, { useEffect, useState } from "react";
+import { getFulfillments } from "../api/fulfillmentApi";
+import HistoryCard from "./HistoryCard";
+
+const HistoryPage = ({ customer }) => {
+  const [transactions, setTransactions] = useState([]);
+
+  useEffect(() => {
+    const fetchFulfillments = async () => {
+      try {
+        const data = await getFulfillments(customer.id);
+        setTransactions(data);
+      } catch (error) {
+        console.error("Error fetching fulfillments:", error);
+      }
+    };
+
+    fetchFulfillments();
+  }, [customer.id]);
+
+  return (
+    <main>
+      <nav aria-label="breadcrumb">
+        <ol className="breadcrumb">
+          <li className="breadcrumb-item"><a href="/">Home</a></li>
+          <li className="breadcrumb-item active" aria-current="page">Order History</li>
+        </ol>
+      </nav>
+
+      <div className="container-fluid pt-3">
+        <div className="row">
+          {transactions.length > 0 ? (
+            transactions.map((transaction) => (
+              <HistoryCard key={transaction.fulfillmentId} transaction={transaction} />
+            ))
+          ) : (
+            <p className="text-center">No fulfillments found.</p>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+};
+
+export default HistoryPage;
+
+
+
+---------------------
+
+import React, { useState } from "react";
+import { cancelFulfillment } from "../api/fulfillmentApi";
+
+const HistoryCard = ({ transaction }) => {
+  const [status, setStatus] = useState(transaction.fulfillmentStatus);
+  const isCancelable = status !== "Cancelled";
+
+  const handleCancel = async () => {
+    if (!isCancelable) return;
+
+    const confirmCancel = window.confirm("Are you sure you want to cancel this fulfillment?");
+    if (!confirmCancel) return;
+
+    try {
+      await cancelFulfillment(transaction.fulfillmentId);
+      setStatus("Cancelled");
+      alert("Fulfillment successfully canceled.");
+    } catch (error) {
+      alert("Error canceling fulfillment.");
+      console.error("Cancel error:", error);
+    }
+  };
+
+  return (
+    <div className="card w-100">
+      <div className="row">
+        <div className="col-md-3 px-0">
+          <img
+            className="card-img-top card-image"
+            src={`${process.env.PUBLIC_URL}/images/${transaction.imgSrc}.jpg`}
+            alt={transaction.itemName}
+            onError={(e) => { e.target.src = "/images/placeholder.jpg"; }}
+          />
+        </div>
+        <div className="col-md-9">
+          <div className="card-body">
+            <h3 className="card-title">{transaction.itemName}</h3>
+            <p className="card-text">{transaction.itemDescription}</p>
+            <p className="card-text">{transaction.qty} × {transaction.itemCost} Points Spent</p>
+            <p className="card-text">
+              <small className="text-secondary">
+                {new Date(transaction.fulfillmentCreationDate).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </small>
+            </p>
+
+            {isCancelable ? (
+              <button className="btn btn-danger" onClick={handleCancel}>Cancel</button>
+            ) : (
+              <button className="btn btn-secondary" disabled>Cancelled</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default HistoryCard;
+=================
+
+const API_BASE_URL = "http://localhost:8080/fulfillment";  // Update with actual API URL
+
+// Fetch fulfillments by customer ID
+export async function getFulfillments(customerId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/${customerId}`);
+    if (!response.ok) throw new Error("Failed to fetch fulfillments");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching fulfillments:", error);
+    throw error;
+  }
+}
+
+// Cancel fulfillment by ID
+export async function cancelFulfillment(fulfillmentId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/cancel/${fulfillmentId}`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Failed to cancel fulfillment");
+  } catch (error) {
+    console.error("Error canceling fulfillment:", error);
+    throw error;
+  }
+}
+
+
+
+
+----------==========================0000------\\
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFulfillments, cancelFulfillment } from '../api/fulfillmentApi';
