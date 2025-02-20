@@ -234,3 +234,32 @@ public class S3SinkTask extends SinkTask {
 </div>
 
 
+
+__________________
+import React from "react";
+import { Navbar, Nav, Button, Container } from "react-bootstrap";
+
+const CustomNavbar = ({ handleShowTopTen, handleExportHistory }) => {
+  return (
+    <Navbar bg="dark" variant="dark" expand="lg">
+      <Container>
+        <Navbar.Brand href="#">Fulfillment Dashboard</Navbar.Brand>
+        <Navbar.Toggle aria-controls="basic-navbar-nav" />
+        <Navbar.Collapse id="basic-navbar-nav">
+          <Nav className="ms-auto">
+            <Button variant="outline-light" className="me-2" onClick={handleShowTopTen}>
+              Top 10 Fulfillments
+            </Button>
+            <Button variant="outline-light" onClick={handleExportHistory}>
+              Export Fulfillment History
+            </Button>
+          </Nav>
+        </Navbar.Collapse>
+      </Container>
+    </Navbar>
+  );
+};
+
+export default CustomNavbar;
+
+
