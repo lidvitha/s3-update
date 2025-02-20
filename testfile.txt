@@ -1,3 +1,125 @@
+
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { getFulfillments, cancelFulfillment } from '../api/fulfillmentApi';
+import HistoryCard from './HistoryCard';
+
+const HistoryPage = ({ customer }) => {
+    const [transactions, setTransactions] = useState([]);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchFulfillments = async () => {
+            try {
+                const data = await getFulfillments(customer.id);
+                setTransactions(data);
+            } catch (err) {
+                setError('Failed to fetch transactions.');
+            }
+        };
+
+        fetchFulfillments();
+    }, [customer.id]);
+
+    const handleCancel = async (fulfillmentId) => {
+        try {
+            const response = await cancelFulfillment(fulfillmentId);
+            if (response.ok) {
+                setTransactions(transactions.map(tx => tx.fulfillmentId === fulfillmentId ? { ...tx, fulfillmentStatus: 'Cancelled' } : tx));
+            } else {
+                setError('Failed to cancel fulfillment.');
+            }
+        } catch (err) {
+            setError('An error occurred while canceling.');
+        }
+    };
+
+    return (
+        <main>
+            <nav aria-label="breadcrumb" role="navigation">
+                <ol className="breadcrumb">
+                    <li className="breadcrumb-item"><Link to="/">Home</Link></li>
+                    <li className="breadcrumb-item active" aria-current="page">Order History</li>
+                </ol>
+            </nav>
+            <div className="container-fluid pt-3">
+                <div className="row">
+                    {transactions.map(transaction => (
+                        <HistoryCard key={transaction.fulfillmentId} transaction={transaction} onCancel={handleCancel} />
+                    ))}
+                </div>
+            </div>
+            {error && <p className="text-danger">{error}</p>}
+        </main>
+    );
+};
+
+export default HistoryPage;
+
+
+
+------------------
+
+import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import java.util.List;
+
+@RestController
+@RequestMapping("/fulfillment")
+public class FulfillmentController {
+    
+    @Autowired
+    private FulfillmentService fulfillmentService;
+    
+    @PostMapping("/cancel/{fulfillmentId}")
+    public ResponseEntity<String> cancelFulfillment(@PathVariable Long fulfillmentId) {
+        boolean isCanceled = fulfillmentService.cancelFulfillment(fulfillmentId);
+        if (isCanceled) {
+            return ResponseEntity.ok("Fulfillment successfully canceled.");
+        } else {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Unable to cancel fulfillment.");
+        }
+    }
+}
+
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+
+@Service
+public class FulfillmentService {
+    
+    @Autowired
+    private FulfillmentMapper fulfillmentMapper;
+    
+    public boolean cancelFulfillment(Long fulfillmentId) {
+        try {
+            fulfillmentMapper.updateFulfillmentStatus(fulfillmentId, "Cancelled");
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+}
+
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Update;
+
+@Mapper
+public interface FulfillmentMapper {
+    
+    @Update("UPDATE fulfillment SET status = #{status} WHERE id = #{fulfillmentId}")
+    void updateFulfillmentStatus(Long fulfillmentId, String status);
+}
+
+
+
+---==---===---===
+
+
+
+
 <!-- Query to cancel fulfillment by updating status -->
     <update id="updateFulfillmentStatus">
         UPDATE fulfillment 
