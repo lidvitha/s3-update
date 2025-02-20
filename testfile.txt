@@ -1,4 +1,9 @@
-
+<!-- Query to cancel fulfillment by updating status -->
+    <update id="updateFulfillmentStatus">
+        UPDATE fulfillment 
+        SET status = #{status}
+        WHERE id = #{fulfillmentId}
+    </update>
 
 
 package com.example.fulfillment.controller;
