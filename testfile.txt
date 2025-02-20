@@ -204,3 +204,33 @@ public class S3SinkTask extends SinkTask {
     transform: translate(-50%, -50%);
 }
 
+<div className="checkbox-container">
+    <label className="checkbox-label">
+        <input
+            type="checkbox"
+            className="checkbox-input"
+            onChange={() => handleChange("Active")}
+        />
+        Active
+    </label>
+
+    <label className="checkbox-label">
+        <input
+            type="checkbox"
+            className="checkbox-input"
+            onChange={() => handleChange("Inactive")}
+        />
+        Inactive
+    </label>
+
+    <label className="checkbox-label">
+        <input
+            type="checkbox"
+            className="checkbox-input"
+            onChange={() => handleChange("Sale")}
+        />
+        Sale
+    </label>
+</div>
+
+
