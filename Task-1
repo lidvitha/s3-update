@@ -1,0 +1,87 @@
+package com.example.sparkmerge;
+
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.List;
+
+public class MergeKeysSortKeysTest {
+
+    private static final Logger log = LoggerFactory.getLogger(MergeKeysSortKeysTest.class);
+
+    public static void main(String[] args) {
+        // 1) Create SparkSession
+        SparkSession spark = SparkSession.builder()
+                .appName("MergeKeysSortKeysTest")
+                .master("local[*]")   // For local testing
+                .getOrCreate();
+
+        try {
+            // 2) Define paths for your previous day (refined) & current day (trusted)
+            //    Adjust these to match your actual S3 or local paths
+            String previousDayPath = "s3a://my-refined-bucket/090/eod/accounts/year=2023/month=02/day=23/";
+            String currentDayPath  = "s3a://my-trusted-bucket/090/event/loanAccounts/year=2023/month=02/day=24/";
+
+            // 3) Read both datasets
+            log.info("Reading previous day from: {}", previousDayPath);
+            Dataset<Row> previousDayDS = spark.read()
+                    .option("mergeSchema", "true")      // If your files have slightly different schemas
+                    .parquet(previousDayPath);
+
+            log.info("Reading current day from: {}", currentDayPath);
+            Dataset<Row> currentDayDS = spark.read()
+                    .option("mergeSchema", "true")
+                    .parquet(currentDayPath);
+
+            // 4) Merge keys & sort keys (Hard-coded example)
+            //    In practice, you'd parse these from your JSON request.
+            List<String> mergeKeys = Arrays.asList("accountNumber", "enterpriseProductClassificationCode");
+            List<String> sortKeys = Arrays.asList("executionTimestamp");
+
+            // 5) Convert mergeKeys to Spark Columns for partitioning
+            Column[] partitionCols = mergeKeys.stream()
+                    .map(functions::col)
+                    .toArray(Column[]::new);
+
+            // 6) Convert sortKeys to Spark Columns (descending example)
+            List<Column> sortCols = sortKeys.stream()
+                    .map(k -> functions.col(k).desc())
+                    .toList();
+
+            // 7) Union the datasets by name (allow missing columns), then repartition & sort
+            Dataset<Row> unioned = previousDayDS
+                    .unionByName(currentDayDS, true)   // allowMissingColumns = true
+                    .repartition(4, partitionCols)     // example partition count = 4
+                    .sortWithinPartitions(sortCols.toArray(new Column[0]));
+
+            // 8) Show the unioned data BEFORE pick-first or custom transform
+            log.info("=== After union & partitioning, row count: {} ===", unioned.count());
+            unioned.show(20, false);
+
+            // 9) (Optional) If you have a "pick-first" logic, apply it here
+            //    For demonstration, let's assume we keep the newest row per merge keys
+            //    based on executionTimestamp:
+            unioned = unioned.groupBy(partitionCols)
+                    .agg(functions.first(functions.struct(sortCols.get(0).expr(), functions.col("*")), true).as("row"))
+                    .select("row.*");
+
+            log.info("=== After pick-first logic, row count: {} ===", unioned.count());
+            unioned.show(20, false);
+
+            // 10) Write final merged data to a new path or console for verification
+            String finalPath = "s3a://my-refined-bucket/090/eod/accounts/year=2023/month=02/day=24-merged/";
+            log.info("Writing final merged data to: {}", finalPath);
+            unioned.write().mode(SaveMode.Overwrite).parquet(finalPath);
+
+        } catch (Exception e) {
+            log.error("Error merging datasets: ", e);
+        } finally {
+            spark.stop();
+        }
+    }
+}
