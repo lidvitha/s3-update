@@ -1,18 +1,15 @@
 package com.example.sparkmerge;
 
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.spark.sql.functions;
+import org.apache.spark.sql.Column;
 
 import java.util.Arrays;
 import java.util.List;
 
-public class MergeKeysSortKeysTest {
+import static org.apache.spark.sql.functions.*;
 
-    private static final Logger log = LoggerFactory.getLogger(MergeKeysSortKeysTest.class);
+public class MergeKeysSortKeysTest {
 
     public static void main(String[] args) {
         // 1) Create SparkSession
@@ -28,12 +25,12 @@ public class MergeKeysSortKeysTest {
             String currentDayPath  = "s3a://my-trusted-bucket/090/event/loanAccounts/year=2023/month=02/day=24/";
 
             // 3) Read both datasets
-            log.info("Reading previous day from: {}", previousDayPath);
+            System.out.println("Reading previous day from: " + previousDayPath);
             Dataset<Row> previousDayDS = spark.read()
-                    .option("mergeSchema", "true")      // If your files have slightly different schemas
+                    .option("mergeSchema", "true") // If your files have slightly different schemas
                     .parquet(previousDayPath);
 
-            log.info("Reading current day from: {}", currentDayPath);
+            System.out.println("Reading current day from: " + currentDayPath);
             Dataset<Row> currentDayDS = spark.read()
                     .option("mergeSchema", "true")
                     .parquet(currentDayPath);
@@ -53,33 +50,43 @@ public class MergeKeysSortKeysTest {
                     .map(k -> functions.col(k).desc())
                     .toList();
 
-            // 7) Union the datasets by name (allow missing columns), then repartition & sort
+            // 7) Union the datasets by name (allow missing columns), then repartition
             Dataset<Row> unioned = previousDayDS
-                    .unionByName(currentDayDS, true)   // allowMissingColumns = true
-                    .repartition(4, partitionCols)     // example partition count = 4
-                    .sortWithinPartitions(sortCols.toArray(new Column[0]));
+                    .unionByName(currentDayDS, true)  // allowMissingColumns = true
+                    .repartition(4, partitionCols);    // example partition count = 4
 
             // 8) Show the unioned data BEFORE pick-first or custom transform
-            log.info("=== After union & partitioning, row count: {} ===", unioned.count());
+            long unionedCount = unioned.count();
+            System.out.println("=== After union & partitioning, row count: " + unionedCount + " ===");
             unioned.show(20, false);
 
-            // 9) (Optional) If you have a "pick-first" logic, apply it here
-            //    For demonstration, let's assume we keep the newest row per merge keys
-            //    based on executionTimestamp:
+            // 9) Pick-first logic using collect_list + sort_array
+            //    - We group by the merge keys
+            //    - We collect each row into a struct that includes executionTimestamp plus all columns
+            //    - We sort the array in descending order, then pick the first item (the newest row)
             unioned = unioned.groupBy(partitionCols)
-                    .agg(functions.first(functions.struct(sortCols.get(0).expr(), functions.col("*")), true).as("row"))
+                    .agg(
+                            sort_array(
+                                    collect_list(
+                                            struct(col("executionTimestamp"), col("*"))
+                                    ),
+                                    false // false => descending
+                            ).getItem(0).alias("row")
+                    )
                     .select("row.*");
 
-            log.info("=== After pick-first logic, row count: {} ===", unioned.count());
+            long finalCount = unioned.count();
+            System.out.println("=== After pick-first logic, row count: " + finalCount + " ===");
             unioned.show(20, false);
 
             // 10) Write final merged data to a new path or console for verification
             String finalPath = "s3a://my-refined-bucket/090/eod/accounts/year=2023/month=02/day=24-merged/";
-            log.info("Writing final merged data to: {}", finalPath);
+            System.out.println("Writing final merged data to: " + finalPath);
             unioned.write().mode(SaveMode.Overwrite).parquet(finalPath);
 
         } catch (Exception e) {
-            log.error("Error merging datasets: ", e);
+            System.out.println("Error merging datasets: " + e.getMessage());
+            e.printStackTrace();
         } finally {
             spark.stop();
         }
