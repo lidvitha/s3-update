@@ -92,3 +92,88 @@ public class MergeKeysSortKeysTest {
         }
     }
 }
+
+
+
+package com.example.sparkmerge;
+
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.Column;
+import static org.apache.spark.sql.functions.*;
+
+import java.util.List;
+import java.util.Arrays;
+
+public class PickFirstWindowExample {
+
+    public static void main(String[] args) {
+        // For Windows: set hadoop.home.dir if needed (winutils.exe in C:/hadoop/bin)
+        System.setProperty("hadoop.home.dir", "C:/hadoop");
+
+        SparkSession spark = SparkSession.builder()
+                .appName("PickFirstWindowExample")
+                .master("local[*]")
+                .getOrCreate();
+
+        try {
+            // 1) Define local file paths for previous day & current day
+            String previousDayPath = "file:///C:/Users/008312Y/pir-test-data/refined-bucket/accounts/day=23";
+            String currentDayPath  = "file:///C:/Users/008312Y/pir-test-data/trusted-bucket/accounts/day=24";
+
+            System.out.println("Reading previous day from: " + previousDayPath);
+            Dataset<Row> previousDayDS = spark.read()
+                    .option("mergeSchema", "true")
+                    .parquet(previousDayPath);
+
+            System.out.println("Reading current day from: " + currentDayPath);
+            Dataset<Row> currentDayDS = spark.read()
+                    .option("mergeSchema", "true")
+                    .parquet(currentDayPath);
+
+            // 2) Union by name, allowing missing columns
+            Dataset<Row> unioned = previousDayDS.unionByName(currentDayDS, true);
+
+            // 3) Same logic snippet: withColumn(... coalesce(...)), then repartition
+            unioned = unioned
+                    .withColumn(
+                        "updateTimestamp",
+                        coalesce(col("accountLastUpdatedTimestamp"), col("accountOpenTimestamp"))
+                    )
+                    .repartition(
+                        4, // example partition count
+                        col("accountNumber"),
+                        col("enterpriseProductClassificationCode")
+                    );
+
+            // 4) "Pick-first" logic using PickFirstFromGroup (no window function):
+            //    - Unioned dataset is transformed with a custom aggregator
+            //    - We group by (accountNumber, enterpriseProductClassificationCode)
+            //    - We pick the row with the largest publishedTimestamp
+            unioned = unioned.transform(
+                new PickFirstFromGroup(
+                    // merge keys
+                    Arrays.asList("accountNumber", "enterpriseProductClassificationCode"),
+                    // sort keys (descending on publishedTimestamp)
+                    Arrays.asList(col("publishedTimestamp").desc())
+                )
+            );
+
+            // 5) Show the final results
+            long finalCount = unioned.count();
+            System.out.println("=== Final pick-first dataset row count: " + finalCount + " ===");
+            unioned.show(50, false);
+
+            // 6) Write to local output path
+            String finalPath = "file:///C:/Users/008312Y/pir-test-data/output/final-pick-first-window";
+            System.out.println("Writing final data to: " + finalPath);
+            unioned.write().mode(SaveMode.Overwrite).parquet(finalPath);
+
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            spark.stop();
+        }
+    }
+}
+
