@@ -1,0 +1,68 @@
+package com.example.sparkcompare;
+
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.types.StructType;
+import static org.apache.spark.sql.functions.*;
+
+public class FullOuterJoinCompare {
+
+    public static void main(String[] args) {
+        SparkSession spark = SparkSession.builder()
+                .appName("FullOuterJoinCompare")
+                .master("local[*]")
+                .getOrCreate();
+
+        try {
+            // Define local file paths for the two Parquet files.
+            String parquetPathA = "file:///C:/Users/008312Y/mydata/parquetA";
+            String parquetPathB = "file:///C:/Users/008312Y/mydata/parquetB";
+
+            // Read both Parquet files.
+            Dataset<Row> dfA = spark.read().parquet(parquetPathA);
+            Dataset<Row> dfB = spark.read().parquet(parquetPathB);
+
+            // Print schemas for verification
+            System.out.println("Schema of dfA:");
+            dfA.printSchema();
+            System.out.println("Schema of dfB:");
+            dfB.printSchema();
+
+            // Ensure both DataFrames have the same column order if possible.
+            // This is important for a row-wise comparison.
+            dfB = dfB.select(dfA.columns());
+
+            // Create a join condition that compares each column for equality.
+            // For simplicity, we assume the DataFrames have the same schema.
+            String[] columns = dfA.columns();
+            Column joinCondition = lit(true); // start with a condition that's always true
+            for (String colName : columns) {
+                joinCondition = joinCondition.and(dfA.col(colName).equalTo(dfB.col(colName)));
+            }
+
+            // Perform a full outer join on the condition.
+            Dataset<Row> joined = dfA.join(dfB, joinCondition, "full_outer");
+
+            // Now, any row where one side is missing will have null in the corresponding columns.
+            // Also, if there are mismatches, the equality condition will fail.
+            // Let's filter out rows where the values from dfA and dfB are not equal.
+            // One approach is to check for a null on one side of a key column.
+            // Here we assume there's at least one column (e.g. "accountNumber") to test:
+            Dataset<Row> differences = joined.filter(
+                dfA.col("accountNumber").isNull().or(dfB.col("accountNumber").isNull())
+            );
+
+            long diffCount = differences.count();
+            if (diffCount == 0) {
+                System.out.println("Both Parquet files have exactly the same rows.");
+            } else {
+                System.out.println("Differences found! Rows that do not match:");
+                differences.show(false);
+            }
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            spark.stop();
+        }
+    }
+}
