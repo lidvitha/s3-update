@@ -66,3 +66,78 @@ public class FullOuterJoinCompare {
         }
     }
 }
+
+
+package com.example.sparkcompare;
+
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.expressions.WindowSpec;
+import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.functions.*;
+
+public class RowByRowCompareSorted {
+
+    public static void main(String[] args) {
+        SparkSession spark = SparkSession.builder()
+                .appName("RowByRowCompareSorted")
+                .master("local[*]")
+                .getOrCreate();
+
+        try {
+            // Define paths for the two Parquet files (already sorted)
+            String parquetPathA = "file:///C:/Users/008312Y/mydata/parquetA";
+            String parquetPathB = "file:///C:/Users/008312Y/mydata/parquetB";
+
+            // Read both Parquet files
+            Dataset<Row> dfA = spark.read().parquet(parquetPathA);
+            Dataset<Row> dfB = spark.read().parquet(parquetPathB);
+
+            // Ensure both DataFrames have the same columns in the same order.
+            dfB = dfB.select(dfA.columns());
+
+            // Add a row index to each DataFrame using a window with a constant ordering.
+            // Because the data is already sorted, ordering by a constant works fine.
+            WindowSpec w = Window.orderBy(lit(1));
+            Dataset<Row> dfAIndexed = dfA.withColumn("row_index", row_number().over(w));
+            Dataset<Row> dfBIndexed = dfB.withColumn("row_index", row_number().over(w));
+
+            // Join on the row_index so that row 1 of dfA is compared with row 1 of dfB, etc.
+            Dataset<Row> joined = dfAIndexed.alias("A")
+                    .join(dfBIndexed.alias("B"), col("A.row_index").equalTo(col("B.row_index")), "full_outer")
+                    .orderBy("A.row_index");
+
+            // Build a condition that flags any row where any column value differs.
+            // We assume both DataFrames have the same schema (excluding the row_index column).
+            String[] commonColumns = dfA.columns();
+            Column diffCondition = lit(false);
+            for (String c : commonColumns) {
+                diffCondition = diffCondition.or(col("A." + c).notEqual(col("B." + c)));
+            }
+
+            // Filter the joined DataFrame for rows where differences exist.
+            Dataset<Row> mismatches = joined.filter(diffCondition);
+
+            // Print the row counts and mismatches
+            long countA = dfAIndexed.count();
+            long countB = dfBIndexed.count();
+            System.out.println("Row count in dfA: " + countA);
+            System.out.println("Row count in dfB: " + countB);
+
+            long diffCount = mismatches.count();
+            if (diffCount == 0) {
+                System.out.println("Both Parquet files have identical rows (row-by-row).");
+            } else {
+                System.out.println("Differences found in " + diffCount + " rows:");
+                mismatches.show(false);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            spark.stop();
+        }
+    }
+}
+
