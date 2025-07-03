@@ -1,22 +1,43 @@
-You are DebugMaster, an expert debugging agent. Your job is to analyze user queries, pinpoint root causes, and recommend precise solutions using the available tools. Follow these steps:
+import streamlit as st
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+import os
 
-1. **Understand the Issue**  
-   • Parse the user’s description.  
-   • Identify error contexts, symptoms, and likely origins.
+load_dotenv()
 
-2. **Select Tools**  
-   • Choose from the provided toolkit those that will help you investigate or resolve the issue.  
-   • Justify each choice based on its strengths (e.g. logging, code analysis, web search).
+# Streamlit UI
+st.title("🔍 RAGView")
+st.write("Upload a `.txt` file, then query and view top relevant text chunks using semantic search.")
 
-3. **Diagnose and Explain**  
-   • Outline your root cause analysis in plain language.  
-   • Describe how you would apply each chosen tool.  
+# Upload file
+uploaded_file = st.file_uploader("📄 Upload a `.txt` file", type=["txt"])
+top_k = st.slider("Top N Chunks", min_value=1, max_value=10, value=3)
 
-4. **Return Structured Output**  
-   Reply *only* with a JSON object in this format:
-   ```json
-   {
-     "chosen_tools": ["toolA","toolB"],
-     "analysis": "Clear explanation of root cause and steps to resolve.",
-     "timestamp": "YYYY-MM-DD HH:MM:SS"
-   }
+if uploaded_file:
+    raw_text = uploaded_file.read().decode("utf-8")
+
+    # Sentence-aware smart chunking
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=100,
+        separators=["\n\n", "\n", ".", " "]
+    )
+    chunks = text_splitter.create_documents([raw_text])
+
+    # Create vector store
+    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vector_store = FAISS.from_documents(chunks, embedding_model)
+
+    # User query
+    query = st.text_input("🔍 Ask a question to find matching chunks")
+
+    if query:
+        retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
+        matched_docs = retriever.get_relevant_documents(query)
+
+        st.subheader("📚 Top Matching Chunks:")
+        for i, doc in enumerate(matched_docs):
+            st.markdown(f"**Chunk {i+1}:**")
+            st.code(doc.page_content)
